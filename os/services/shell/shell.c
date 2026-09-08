@@ -111,7 +111,7 @@ PT_THREAD(shell_input(struct pt *pt, shell_output_func output, const char *cmd))
       static struct pt cmd_pt;
       PT_SPAWN(pt, &cmd_pt, cmd_descr->func(&cmd_pt, output, args));
     } else {
-      SHELL_OUTPUT(output, "Command not found. Type 'help' for a list of commands\n");
+      SHELL_OUTPUT(output, "Command '%s' not found. Type 'help' for a list of commands\n", cmd);
     }
   }
 

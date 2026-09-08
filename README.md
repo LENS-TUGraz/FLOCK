@@ -1,223 +1,158 @@
-# Open-SF (OSF): An Open-Source Project for Multi-PHY Synchronous Flooding Protocols
+# FLock
 
-## Intro
+FLock is a localization and ranging extension built on top of [OSF](https://github.com/open-sf/osf). The example firmware is under [examples/osf-flock](examples/osf-flock), and its runtime configuration is defined in [examples/osf-flock/project-conf.h](examples/osf-flock/project-conf.h).
 
-Open-SF (OSF) is an open-source stack for the development of multi-PHY Synchronous Flooding (SF) protocols, presented at [EWSN '22](https://ewsn2022.jku.at/). Based on the [Contiki-NG](https://github.com/contiki-ng/contiki-ng) low-power operating system, OSF was originally forked from [BlueFlood](https://github.com/iot-chalmers/BlueFlood). Currently OSF only supports the [Nordic nRF52840](https://www.nordicsemi.com/Products/Development-hardware/nrf52840-dk) (Contiki-NG has support for both the nRF52840-DK and the nRF52840-dongle).
+## Requirements
 
-OSF *completely* replaces BlueFlood's polling-based radio driver with an interrupt-based driver, allowing fine-grained timer control of the state machine. Furthermore OSF supports a number of easy-to-use tools for benchmarking and testing with the [D-Cube](https://iti-testbed.tugraz.at/wiki/index.php/Main_Page) low-power wireless testbed.
+This project is a Contiki-NG-based firmware. FLOCK has been designed for the Qorvo DWM1001-Dev board.
 
-## OSFv6 (IPv6 Support) and Demo Paper
+A typical setup includes:
 
-We have recently added IPv6 support as part of OSF, and will present this in the demo sessions at [EWSN '23](https://events.dimes.unical.it/ewsn2023/). While this has not yet been fully integrated with the original OSF (and so has not yet been merged to main), you can check out the branch [here](https://github.com/open-sf/osf/tree/osfv6).
+- the repository checked out with its submodules/dependencies available
+- a supported target such as `nrf52840`
+- a `BOARD` such as `dwm1001`
+- a serial connection for flashing and shell access
+- `nrfjprog` for the automatic deployment helper on Nordic boards
 
-The OSFv6 demo paper can be found [here](http://www.carloalbertoboano.com/documents/baddeley23osfv6.pdf).
+## Setup
 
-## Features
+FLock inherits the OSF deployment model: each node is assigned an integer ID based on its MAC address via a deployment map.
 
-- Full customization of flooding rounds e.g., NTX, PWR, NSLOTS etc. (including runtime multi-PHY configuration).
-- Extension framework for developing SF radio-driver enhancements.
-- Extension framework for modifying existing SF protocols.
-- Protocol framework for developing new SF protocols.
-- One-to-Many dissemination communication.
-- Many-to-One collection communication.
-- Slot-based channel hopping.
-- Robust Flooding (RoF) SF primitive (i.e. Tx-Tx-Tx).
-- Glossy SF primitive (i.e. Rx-Tx-Rx).
-- Nordic nRF42850 helper for tilix support (Linux only).
-- Full support and integration with the [D-Cube](https://iti-testbed.tugraz.at/wiki/index.php/Main_Page) testbed API using [Contiki-NG-DCube](https://github.com/mbaddeley/contiki-ng-dcube).
+### Generate a deployment map
 
-## EWSN 2022 Paper
+The preferred method is the helper script in [tools/nrf/nrf-helper.sh](tools/nrf/nrf-helper.sh):
 
-Full details of the OSF architecture, along with extensive benchmarking results, can be found in the [EWSN 2022 paper](https://michaelbaddeley.files.wordpress.com/2022/07/baddeley2022osf.pdf).
-
-## How to Cite OSF
-
+```bash
+cd tools/nrf
+./nrf-helper.sh -info -s -d
 ```
-@inproceedings{baddeley2022osf,
-  author= {Baddeley, Michael and Gyl, Yevgen and Schu{\ss}, Markus and Ma, Xiaoyuan and Boano, Carlo Alberto},
-  title= {{OSF: An Open-Source Framework for Synchronous Flooding over Multiple Physical Layers}},
-  booktitle= {Proceedings of the $19^{th}$ International Conference on Embedded Wireless Systems and Networks ({EWSN})},
-  month= oct,
-  year=2022,
+
+This script scans connected Nordic devices, resolves each board MAC address, and writes deployment files under:
+
+- [os/services/deployment/nulltb/deployment-map-nulltb.c](os/services/deployment/nulltb/deployment-map-nulltb.c)
+- [os/services/deployment/nulltb/deployment-map-nulltb.h](os/services/deployment/nulltb/deployment-map-nulltb.h)
+
+### Manual deployment map
+
+If you want to create the files manually, the deployment table must match the format used by the deployment service. The array entries are `id, mac` pairs, and the header defines `DEPLOYMENT_MAPPING_LEN`.
+
+Example for a two-node setup:
+
+1. Create [os/services/deployment/nulltb/deployment-map-nulltb.c](os/services/deployment/nulltb/deployment-map-nulltb.c):
+
+```c
+#include "services/deployment/deployment.h"
+#include "deployment-map-nulltb.h"
+
+const struct id_mac deployment_nulltb[] = {
+  { 1, {{0xf4, 0xce, 0x36, 0xfa, 0x3d, 0x0a, 0x38, 0x4f}}},
+  { 2, {{0xf4, 0xce, 0x36, 0x08, 0xcb, 0x9d, 0x4b, 0x98}}},
+  { 0, {{0}}}
 };
-
-@inproceedings{baddeley23osfv6,
-  author = {Michael Baddeley and Markus Schu{\ss} and Yevgen Gyl and Monika Prakash and Xiaoyuan Ma and Carlo Alberto Boano},
-  title = {{Video over Synchronous Flooding with OSFv6}},
-  booktitle = {Proceedings of the $20^{th}$ International Conference on Embedded Wireless Systems and Networks ({EWSN}), demo session},
-  month = sep,	
-  year = 2023,
-};
 ```
 
-## Relevant Folders
+2. Create [os/services/deployment/nulltb/deployment-map-nulltb.h](os/services/deployment/nulltb/deployment-map-nulltb.h):
 
-An example application:
-- examples/osf
+```c
+#ifndef DEPLOYMENT_MAP_NULLTB_H_
+#define DEPLOYMENT_MAP_NULLTB_H_
 
-Main OSF file structure:
-- os/net/mac/osf
+#define DEPLOYMENT_MAPPING_LEN 2
 
-For testing purposes:
-- os/services/deployment
-- os/services/testbed
-- tools/dcube
-- tools/nrf
-
-## Outstanding TODOs
-
-While OSF supports a fair number of features, there are still many things on the TODO list! Feel free to pick up any of the issues, and if you're building on OSF for your own projects then please consider creating a Pull Request :)
-
----
-
-## Installation
-
-OSF has been tested and developed on Ubuntu. We strongly recommend using a native Ubuntu installation, and not a VM (unless you know what you are doing with permissions etc.). 
-
-Details on how to install the arm compiler and other tools needed for the nRF boards can be found on the [Contiki-NG Wiki](https://github.com/contiki-ng/contiki-ng/wiki/Platform-nrf52840).
-
-**IMPORTANT** While there are newer compilers available, currently OSF has only been tested using arm-gcc 9. Do not use any other compiler.
-
-```
-$ arm-none-eabi-gcc --version
-arm-none-eabi-gcc (GNU Arm Embedded Toolchain 9-2020-q2-update) 9.3.1 20200408 (release)
-Copyright (C) 2019 Free Software Foundation, Inc.
-This is free software; see the source for copying conditions.  There is NO
-warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#endif /* DEPLOYMENT_MAP_NULLTB_H_ */
 ```
 
-Additionally you will need to install a number of other programs to run `nrf-helper.sh` (which uses tilix to spawn different child windows for each board.). *N.B. You will need `moreutils` for the `ts` utility, which allows timestamping of the serial.*
+During startup, the device prints its link-layer address and node ID. A value like:
 
-```
-$ sudo apt install socat moreutils tilix picocom
-```
-
-## How to Use
-
-### nrf-helper.sh
-
-You can configure this using the *nrf-helper* tool to automatically generate a deployment mapping of all boards connected to your machine.
-```
-$ cd tools/nrf
-$ ./nrf-helper.sh -info -s -d
+```text
+[INFO: Main      ] Node ID: 0
+[INFO: Main      ] Link-layer address: f4ce.36fa.3d0a.384f
 ```
 
-You can find your board IDs in the deployment mapping generated `os/services/deployment/nulltb/deployment-map-nulltb.c`, or by using following command.
-```
-$ ./nrf-helper -info
-```
+means that the MAC was not found in the deployment table yet. The `mac-addr` shell command can also be used to print the current radio address.
 
-You can also use the *nrf-helper* tool to automatically spawn serial terminals if using [tilix](https://gnunn1.github.io/tilix-web/).
-```
-$ sudo apt install tilix
-$ tilix
-$ cd <path-to-osf>/tools/nrf
-$ ./nrf-helper -t
+## Build and flash
+
+Build and flash the example firmware from the example directory:
+
+```bash
+cd examples/osf-flock
+make clean TARGET=nrf52840 BOARD=dwm1001 DEPLOYMENT=nulltb & make node.upload-all TARGET=nrf52840 BOARD=dwm1001 DEPLOYMENT=nulltb
 ```
 
-### Hello World
-OSF contains a simple hello world application that sends and receives messages at the application layer. You can specify the source node with SRC=\* and broadcast to all other nodes with DST=255.
+The example project uses the OSF and FLock configuration from [examples/osf-flock/project-conf.h](examples/osf-flock/project-conf.h), and it compiles the FLock application modules from [examples/osf-flock/Makefile](examples/osf-flock/Makefile).
 
-```
-$ cd examples/osf
-$ make clean TARGET=nrf52840 && make -j16 node.upload-all TARGET=nrf52840 BOARD=dk SRC=1 DST=2 DEPLOYMENT=nulltb HELLO_WORLD=1 PERIOD=1000 CHN=1 LOGGING=1 GPIO=1 LEDS=1 NTX=6 NSLOTS=6 PWR=ZerodBm PROTO=OSF_PROTO_BCAST PHY=PHY_BLE_500K
+## Login
 
-```
+Nodes expose a shell via the serial console. The default baud rate is `230400`.
 
-### Testbed Service
-
-For testing purposes, you can use the NULLTB dummy testbed setup in *services/testbed/..* to automatically generate, send, and receive random packet data between boards. This testbed service can also be used to interface with the D-Cube testbed. For more information on this, please check out [Contiki-NG-DCube](https://github.com/mbaddeley/contiki-ng-dcube).
-
-The following command will allow you to compile OSF, flash it to any number of nRF52840-dk boards you have connected to your machine, and observe dummy packets sent from one board (SRC=\*) to all other boards (DST=255).
-
-```
-$ cd examples/osf
-$ make clean TARGET=nrf52840 && make -j16 node.upload-all TARGET=nrf52840 BOARD=dk SRC=1 DST=255 TESTBED=nulltb DEPLOYMENT=nulltb LENGTH=8 PERIOD=200 CHN=1 LOGGING=1 GPIO=1 LEDS=1 PROTO=OSF_PROTO_BCAST PHY=PHY_BLE_500K
+```bash
+make TARGET=nrf52840 login PORT=/dev/ttyACM0 BAUDRATE=230400
 ```
 
-### Extension Framework
+If the port is not known in advance, use the serial port that matches your board and update `PORT` accordingly.
 
-OSF implements an extension framework to allow straightforward extension of the base driver and/or protocols. A couple of extensions, *random backoff* and *random NTX*, were implemented as part of EWSN '22. Both these extensions significantly improve the performance of the BLE 2M physical layer in dense scenarios, where the uncoded PHYs rarely benefit from capture effects and are significantly impacted by desynchronization.
+## Simulation
 
-#### Random BACKOFF
+The Python simulation tooling lives under [examples/osf-flock/scripts/simulator](examples/osf-flock/scripts/simulator). Relevant entry points include:
 
-```
-make clean TARGET=nrf52840 && make -j16 node.upload-all TARGET=nrf52840 BOARD=dk DST=1 SRC=2,3,4 TESTBED=nulltb DEPLOYMENT=nulltb LENGTH=64 PERIOD=1000 CHN=1 LOGGING=1 GPIO=1 LEDS=1 NTX=6 NSLOTS=6 NTA=4 PWR=ZerodBm PROTO=OSF_PROTO_STA PHY=PHY_BLE_2M BACKOFF=1
-```
+- [examples/osf-flock/scripts/simulator/main.py](examples/osf-flock/scripts/simulator/main.py)
+- [examples/osf-flock/scripts/simulator/main_new.py](examples/osf-flock/scripts/simulator/main_new.py)
 
-#### Random NTX
+The simulator uses the FLock localization logic in the same folder hierarchy and can be run from that directory.
 
-```
-make clean TARGET=nrf52840 && make -j16 node.upload-all TARGET=nrf52840 BOARD=dk DST=1 SRC=2,3,4 TESTBED=nulltb DEPLOYMENT=nulltb LENGTH=64 PERIOD=1000 CHN=1 LOGGING=1 GPIO=1 LEDS=1 NTX=6 NSLOTS=12 PWR=ZerodBm PROTO=OSF_PROTO_BCAST PHY=PHY_BLE_2M RNTX=1
-```
+## Configuration
 
-### Multi-PHY
+The runtime configuration is driven by `FLOCK_CONF_*` and `OSF_CONF_*` values, typically defined in [examples/osf-flock/project-conf.h](examples/osf-flock/project-conf.h) and resolved in [examples/osf-flock/flock-conf.h](examples/osf-flock/flock-conf.h).
 
-OSF supports the development of multi-PHY protocols, allowing exploitation of multiple PHYS *in the same protocol*, as well as dynamic selection and (re)configuration of the PHY *at runtime*. OSF provides a naïve implementation of such a protocol, the details of which can be found in the [paper](https://michaelbaddeley.files.wordpress.com/2022/07/baddeley2022osf.pdf).
+### Core FLock settings
 
-```
-make clean TARGET=nrf52840 && make -j16 node.upload-all TARGET=nrf52840 BOARD=dk DST=1 SRC=2,3,4 TESTBED=nulltb DEPLOYMENT=nulltb LENGTH=64 PERIOD=1000 CHN=1 LOGGING=1 GPIO=1 LEDS=1 NTX=6 NSLOTS=6 NTA=4 PWR=ZerodBm PROTO=OSF_PROTO_STA PHY=PHY_BLE_2M MPHY=1
-```
+| Option | Type | Default in example config | Notes |
+| --- | --- | --- | --- |
+| `FLOCK_MAX_NODES` | int | `51` | maximum supported node count |
+| `FLOCK_CONF_DIST_TABLE_SIZE` | int | `FLOCK_MAX_NODES * (FLOCK_MAX_NODES - 1)` | distance table capacity |
+| `FLOCK_CONF_POS_TABLE_SIZE` | int | `FLOCK_MAX_NODES` | position table capacity |
+| `FLOCK_CONF_REPORT_INTERVAL` | clock_time_t | `CLOCK_SECOND * 1` | periodic report cadence |
+| `FLOCK_CONF_PRINT_RANGE_REPORT` | bool | `1` | print range reports when received |
+| `FLOCK_CONF_PRINT_RANGE_RESULT` | bool | `0` | print raw range result |
 
----   
+### OSF settings
 
-## Makeargs
+| Option | Type | Default in example config | Notes |
+| --- | --- | --- | --- |
+| `OSF_CONF_PERIOD_MS` | int | `900` | OSF period in milliseconds |
+| `OSF_CONF_NTX` | int | `3` | retransmissions per TX slot |
+| `OSF_CONF_PROTO` | enum | `OSF_PROTO_STT` | protocol selection |
+| `OSF_CONF_PHY` | enum | `PHY_BLE_2M` | PHY selection |
 
-OSF has the following make options. Default options are in **bold**.
+### Localization settings
 
-#### Deployment and Data Generation
-| ARG                     | Description |
-|-------------------------| ----------- |
-| HELLO_WORLD=1/0 | Hello World application |
-| DEPLOYEMENT=nulltb/dcube | D-Cube testbed integration OR dummy testbed integration |
-| TESTBED=nulltb/dcube | D-Cube testbed deployment IDs OR dummy testbed deployment IDs (using *nrf-helper.sh*) |
-| SRC=1,2, ... * | ID's (as per deployment mapping) of source nodes |
-| DST=1,2, ... * | ID's (as per deployment mapping) of destination nodes |
-| FWD=1,2, ... * | ID's (as per deployment mapping) of forwarding nodes |
+| Option | Type | Default in example config | Notes |
+| --- | --- | --- | --- |
+| `FLOCK_CONF_LOC_LEARNING_RATE` | float | `0.020f` | gradient descent learning rate |
+| `FLOCK_CONF_LOC_ITERATIONS` | int | `500` | maximum optimization iterations |
+| `FLOCK_CONF_LOC_EPOCHS_TO_KEEP` | int | `0` | number of epochs retained |
+| `FLOCK_CONF_LOC_MIN_DIST_MM` | int | `0` | minimum range used for localization |
+| `FLOCK_CONF_LOC_MAX_DIST_MM` | int | `100000` | maximum range used for localization |
+| `FLOCK_CONF_LOC_MAX_RETRIES` | int | `16` | localization retry count |
+| `FLOCK_CONF_LOC_APRIORI_RANGE_ERROR_MM` | int | `250` | expected residual error in mm |
+| `FLOCK_CONF_LOC_UPDATE_RATE` | clock_time_t | `0` | periodic localization rate |
+| `FLOCK_CONF_LOC_INIT_AREA_M` | float | `80.0f` | initial search area in meters |
 
-#### Data
-| ARG                     | Description |
-|-------------------------| ----------- |
-| LENGTH=* (**8**) | (Max) length of data in Bytes) |
+## Shell commands
 
-#### Basic OSF Configuration
-| ARG                     | Description |
-|-------------------------| ----------- |
-| TS=* | ID of timesync node. Will default to 1st SRC w/ BCAST or 1st DST w/ STA |
-| PROTO=**OSF_PROTO_BCAST**/OSF_PROTO_STA  | Protocol choice. Broadcast (i.e., just one S round with a payload) or STA (i.e., Crystal) |
-| PERIOD=* (**500**) | Epoch periodicity in ms |
-| NTX=* (**6**) | Max # of Tx in a round |
-| NSLOTS=* (**12**) | Max # of slots in a round |
-| PHY=PHY_BLE_2M/1M/**500K**/125K / PHY_IEEE | Underlying physical layer |
-| PRIMITIVE=**OSF_PRIMITIVE_ROF**/OSF_PRIMITIVE_GLOSSY | Underlying SF primitive (i.e., RxTxTx or RxTxRxTx) |
-| CHN=**1**/0 | Per-slot channel hopping (0 = single channel, 1 = seeded, 2 = only use sync channels) |
-| PWR=Neg20dBm -> Pos8dBm (**ZerodBm**) | Transmission power (N.B. nRF Neg40dBm doesn't work!) |
+A node in FLock can be controlled through the serial shell. The commands exposed by the example build are:
 
-#### Protocol Configuration
-| ARG                     | Description |
-|-------------------------| ----------- |
-| NTA=* (**4**) | Number of TA pairs in STA protocol (Crystal) |
-| EMPTY=* (**0**) | Signal an early exit from STA protocol after *N* empty rounds (to make STA more like Crystal) |
-| TOG=**0**/1 | Bit toggling to indicate reception on the ACK round in STA |
-| ALWAYS_ACK=**0**/1 | **Always** ACK  (i.e., every epoch). To be used in conjunction with TOG=0/1 |
-| MPHY=**0**/1 | Naïve [EWSN '22 multi-PHY protocol](https://michaelbaddeley.files.wordpress.com/2022/07/baddeley2022osf.pdf) (in conjunction with STA protocol) |
+| Command | Parameters | Description |
+| --- | --- | --- |
+| `flock-dist-table` | none | print the current distance table |
+| `flock-dist-table-clear` | none | clear the distance table |
+| `flock-pos-table` | none | print the current position table |
+| `flock-pos-table-clear` | none | clear the position table |
+| `flock-set-pos` | `<id> <x> <y>` | set a node position in millimeters |
+| `flock-set-dist` | `<from_id> <to_id> <dist_mm>` | manually set a distance entry |
+| `flock-localize` | none | trigger localization |
+| `flock-loc-set-iterations` | `<num>` | set the maximum number of localization iterations |
+| `flock-loc-set-lr` | `<lr>` | set the learning rate |
+| `flock-radio-status` | none | print the DW1000 radio status |
 
-#### Protocol Extensions
-| ARG                     | Description |
-|-------------------------| ----------- |
-| BACKOFF=**0**/1 | Random backoff for STA protocol |
-| ND=**0**/1 | Noise detection extension |
-
-#### Driver Extensions
-| ARG                     | Description |
-|-------------------------| ----------- |
-| RNTX=**0**/1 | Random NTX for *any* protocol |
-
-#### Testing and Debug
-| ARG                     | Description |
-|-------------------------| ----------- |
-| LOGGING=**1**/0 | OSF logging. (see osf-logging.h) |
-| GPIO=**1**/0 | OSF GPIOs (see osf-debug.h) |
-| LEDS=**1**/0 | OSF LEDs |
-| MISS_RXS=**0**/1 | Miss *N* receptions in a round |
-| TEST_NODE=**0**/1 | Node ID under test for MISS_RXS |

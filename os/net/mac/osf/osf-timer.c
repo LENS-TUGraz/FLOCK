@@ -63,7 +63,7 @@ rtimerx_init()
   /* Clear timer interrupts */
   NVIC_DisableIRQ(TIMERX_IRQn);
   NVIC_ClearPendingIRQ(TIMERX_IRQn);
-  NVIC_SetPriority(TIMERX_IRQn, 1);
+  NVIC_SetPriority(TIMERX_IRQn, 2);
 
   /* Set the timer in Timer Mode */
   NRF_TIMERX->MODE = TIMER_MODE_MODE_Timer;

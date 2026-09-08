@@ -69,7 +69,12 @@ rtimer_arch_init(void)
 void
 rtimer_arch_schedule(rtimer_clock_t t)
 {
-  nrf_timer_cc_write(TIMER_INSTANCE, NRF_TIMER_CC_CHANNEL0, t);
+  rtimer_clock_t rtimer_now = rtimer_arch_now();
+  if(t < rtimer_now) {
+    nrf_timer_cc_write(TIMER_INSTANCE, NRF_TIMER_CC_CHANNEL0, rtimer_now + 10);      
+  }else{
+    nrf_timer_cc_write(TIMER_INSTANCE, NRF_TIMER_CC_CHANNEL0, t);
+  }
 }
 /*---------------------------------------------------------------------------*/
 rtimer_clock_t

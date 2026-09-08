@@ -1,0 +1,4 @@
+CONTIKI_TARGET_DIRS += uwpcie
+CONTIKI_TARGET_SOURCEFILES += board-leds.c board-buttons.c nrf52840dk-sensors.c dw1000-arch.c
+
+NRF52_SDK_C_SRCS += integration/nrfx/legacy/nrf_drv_spi.c

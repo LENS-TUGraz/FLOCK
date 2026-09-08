@@ -87,7 +87,7 @@ AUTOSTART_PROCESSES(&opensf_process);
 /* OSF callback to receive data. */
 /*---------------------------------------------------------------------------*/
 void
-input_callback(uint8_t *data, uint8_t len)
+input_callback(uint8_t src, uint8_t dest, uint8_t *data, uint8_t len)
 {
 #if HELLO_WORLD
   LOG_INFO("RX: %s\n", data);

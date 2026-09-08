@@ -67,6 +67,23 @@ else ifeq ($(BOARD), dwm1001)
   NRF52840_USB_DFU_TRIGGER ?= 0
   NRF52840_USB_DFU_BOOTLOADER ?= 0
 
+else ifeq ($(BOARD), dkuwb)
+  SOC ?= nrf52840
+  LDSCRIPT ?= $(CONTIKI_CPU)/ld/nrf52840.ld
+  CFLAGS += -DBOARD_PCA10056
+  NRF52840_NATIVE_USB ?= 0
+  NRF52840_ESB_RADIO ?= 0
+  NRF52840_USB_DFU_TRIGGER ?= 0
+  NRF52840_USB_DFU_BOOTLOADER ?= 0
+
+else ifeq ($(BOARD), uwpcie)
+  SOC ?= nrf52840
+  LDSCRIPT ?= $(CONTIKI_CPU)/ld/nrf52840.ld
+  CFLAGS += -DBOARD_PCA10056
+  NRF52840_NATIVE_USB ?= 0
+  NRF52840_ESB_RADIO ?= 0
+  NRF52840_USB_DFU_TRIGGER ?= 0
+  NRF52840_USB_DFU_BOOTLOADER ?= 0
 else
   $(error Invalid BOARD specified: $(BOARD))
 endif
@@ -141,6 +158,8 @@ endif
 LDFLAGS += -L $(NRF5_SDK_ROOT)/modules/nrfx/mdk
 TARGET_LIBFILES += -lc -lnosys
 
+TARGET_LIBFILES += -lm
+
 # nRF52 SDK sources
 NRF52_SDK_C_SRCS += components/boards/boards.c \
   components/libraries/util/app_error.c \
@@ -156,11 +175,14 @@ NRF52_SDK_C_SRCS += components/boards/boards.c \
   modules/nrfx/drivers/src/nrfx_rng.c \
   modules/nrfx/drivers/src/nrfx_wdt.c \
   modules/nrfx/drivers/src/nrfx_power.c \
+  modules/nrfx/drivers/src/nrfx_spim.c \
   integration/nrfx/legacy/nrf_drv_clock.c \
   integration/nrfx/legacy/nrf_drv_rng.c \
   integration/nrfx/legacy/nrf_drv_power.c \
   integration/nrfx/legacy/nrf_drv_twi.c \
+  integration/nrfx/legacy/nrf_drv_spi.c \
   modules/nrfx/drivers/src/nrfx_twi.c \
+  arch/cpu/nrf/lib/nrfx/drivers/src/nrfx_spi.c \
 
 ifeq ($(SOC), nrf52840)
   NRF52_SDK_ASM_SRCS = modules/nrfx/mdk/gcc_startup_nrf52840.S
@@ -218,6 +240,7 @@ endif
 ifeq (, $(shell which $(NRFJPROG)))
 	$(error Could not find nrfjprog "$(NRFJPROG)", please install it)
 else
+	$(NRFJPROG) -f nrf52 $(NRFJPROG_FLAGS) --recover
 	$(NRFJPROG) -f nrf52 $(NRFJPROG_FLAGS) --sectorerase --program $<
 	$(NRFJPROG) -f nrf52 $(NRFJPROG_FLAGS) --reset
 endif
@@ -236,6 +259,7 @@ ifneq ($(filter nrf-upload-sequence,$(MAKECMDGOALS)),)
 endif
 
 nrf-upload-snr.%:
+	$(NRFJPROG) -f nrf52 --snr $* --recover
 	$(NRFJPROG) -f nrf52 --snr $* --sectorerase --program $(HEX_FILE)
 	$(NRFJPROG) -f nrf52 --snr $* --reset
 

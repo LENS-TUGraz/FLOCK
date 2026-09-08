@@ -1,2 +1,4 @@
 CONTIKI_TARGET_DIRS += dwm1001
-CONTIKI_TARGET_SOURCEFILES += board-leds.c board-buttons.c dwm1001-sensors.c 
+CONTIKI_TARGET_SOURCEFILES += board-leds.c board-buttons.c dwm1001-sensors.c dw1000-arch.c
+
+NRF52_SDK_C_SRCS += integration/nrfx/legacy/nrf_drv_spi.c

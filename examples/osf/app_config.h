@@ -5,6 +5,12 @@
  #define RTC0_ENABLED 1
  #define RTC1_ENABLED 0
 //
+#define SPI_ENABLED 1
+#define SPI1_ENABLED 1
+#define NRFX_SPIM_ENABLED 1
+#define NRFX_SPIM1_ENABLED 1
+#define NRFX_SPIM_DEFAULT_CONFIG_IRQ_PRIORITY 6
+#define NRFX_SPI_MISO_PULL_CFG 1
  /* TIMER periperal driver */
  #define TIMER0_ENABLED 1
  #define TIMER1_ENABLED 1

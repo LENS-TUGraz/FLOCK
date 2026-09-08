@@ -190,6 +190,7 @@ endif
 ifeq (, $(shell which $(NRFJPROG)))
 	$(error Could not find nrfjprog "$(NRFJPROG)", please install it)
 else
+	$(NRFJPROG) $(NRFJPROG_OPTIONS) $(NRFJPROG_FLAGS) --recover
 	$(NRFJPROG) $(NRFJPROG_OPTIONS) $(NRFJPROG_FLAGS) --sectorerase --program $<
 	$(NRFJPROG) $(NRFJPROG_OPTIONS) $(NRFJPROG_FLAGS) --reset
 endif
@@ -208,6 +209,7 @@ ifneq ($(filter nrf-upload-sequence,$(MAKECMDGOALS)),)
 endif
 
 nrf-upload-snr.%:
+	$(NRFJPROG) $(NRFJPROG_OPTIONS) --snr $* --recover
 	$(NRFJPROG) $(NRFJPROG_OPTIONS) --snr $* --sectorerase --program $(HEX_FILE)
 	$(NRFJPROG) $(NRFJPROG_OPTIONS) --snr $* --reset
 

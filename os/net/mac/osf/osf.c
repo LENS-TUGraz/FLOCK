@@ -69,6 +69,11 @@
 #include "net/mac/osf/osf-log.h"
 #include "net/mac/osf/osf-stat.h"
 
+#if FLOCK_ENABLED
+#include "examples/osf-flock/flock-rng.h"
+#include "examples/osf-flock/project-conf.h"
+#endif
+
 /* MUST INCLUDE THESE FOR NODE IDS AND TESTBED PATTERNS */
 #include "services/deployment/deployment.h"
 #if CONF_TESTBED
@@ -78,7 +83,7 @@
 /* Log configuration */
 #include "sys/log.h"
 #define LOG_MODULE "OSF"
-#define LOG_LEVEL LOG_LEVEL_DBG
+#define LOG_LEVEL LOG_LEVEL_WARN
 
 /*---------------------------------------------------------------------------*/
 /* OSF main struct */
@@ -563,7 +568,12 @@ end_rx()
     if(!node_is_timesync && osf.round->sync) {
       osf_sync();
     }
-    /* Do extensions */
+#if FLOCK_ENABLED
+    if(osf.round->type == OSF_ROUND_S){
+      OSF_FLOCK_SYNC_HOOK();
+    }
+#endif
+    /* Do extenlsions */
     DO_OSF_D_EXTENSION(rx_ok, osf.round->type, osf_buf, osf_buf_len);
 #if OSF_LOGGING
     osf_log_slot_state('R');
@@ -653,6 +663,11 @@ end_tx()
   osf_log_radio_buffer(osf_buf, OSF_PKT_PHY_LEN(osf.rconf->phy->mode, osf.round->statlen) + osf_buf_len, 1, OSF_PKT_RND_LEN(osf.round->type), osf.round->statlen, osf.round->type);
   osf.slot++; // increment to next slot (also do this in RX)
   do_slot();
+#if FLOCK_ENABLED
+  if(osf.round->type == OSF_ROUND_S && node_is_timesync) {   
+    OSF_FLOCK_SYNC_HOOK();
+  }
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -885,11 +900,11 @@ PROCESS_THREAD(osf_post_round_process, ev, ev_data)
     }
 
     if (osf_buf_rx_length() > 2*OSF_NTX) {
-      LOG_WARN("RX queue %d elements !\r\n", osf_buf_rx_length());
+      LOG_DBG("RX queue %d elements !\r\n", osf_buf_rx_length());
     }
 
     if (osf_buf_tx_length() > 2*OSF_NTX) {
-      LOG_WARN("TX queue %d elements !\r\n", osf_buf_tx_length());
+      LOG_DBG("TX queue %d elements !\r\n", osf_buf_tx_length());
     }
 
   }
@@ -1049,7 +1064,7 @@ osf_send(uint8_t *data, uint8_t len, uint8_t dst)
 uint8_t
 osf_receive(uint8_t src, uint8_t dst, uint8_t *data, uint8_t len)
 {
-  receive_callback(data, len);
+  receive_callback(src, dst, data, len);
   return 1;
 }
 
@@ -1101,9 +1116,10 @@ osf_on()
   LOG_INFO("- NVIC_GetPriority(RADIO_IRQn)  - %lu \n", NVIC_GetPriority(RADIO_IRQn));  // 0
   LOG_INFO("- NVIC_GetPriority(TIMERX_IRQn) - %lu \n", NVIC_GetPriority(TIMERX_IRQn)); // 1
 #if NRF52840_NATIVE_USB
+  NVIC_SetPriority(USBD_IRQn, NRFX_USBD_CONFIG_IRQ_PRIORITY);
   LOG_INFO("- NVIC_GetPriority(USBD_IRQn)   - %lu \n", NVIC_GetPriority(USBD_IRQn));   // NRFX_USBD_CONFIG_IRQ_PRIORITY 6
 #endif
-  NVIC_SetPriority(TIMER0_IRQn, 2);
+  NVIC_SetPriority(TIMER0_IRQn, 3);
   LOG_INFO("- NVIC_GetPriority(TIMER0_IRQn) - %lu \n", NVIC_GetPriority(TIMER0_IRQn)); // 2
   NVIC_SetPriority(RTC0_IRQn, 5);
   LOG_INFO("- NVIC_GetPriority(RTC0_IRQn)   - %lu \n", NVIC_GetPriority(RTC0_IRQn));   // 5

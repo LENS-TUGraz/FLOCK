@@ -390,6 +390,25 @@ PT_THREAD(cmd_help(struct pt *pt, shell_output_func output, char *args))
 
   PT_END(pt);
 }
+/*---------------------------------------------------------------------------*/
+static
+PT_THREAD(cmd_echo(struct pt *pt, shell_output_func output, char *args))
+{
+  PT_BEGIN(pt);
+
+  char *next_args;
+  SHELL_ARGS_INIT(args, next_args);
+
+  /* Get first arg (string to echo) */
+  SHELL_ARGS_NEXT(args, next_args);
+  if(args == NULL) {
+    SHELL_OUTPUT(output, "Did not specify string to be echoed\n");
+    PT_EXIT(pt);
+  }
+  SHELL_OUTPUT(output, "%s\n", args);
+  
+  PT_END(pt);
+}
 #if UIP_CONF_IPV6_RPL
 /*---------------------------------------------------------------------------*/
 static
@@ -992,8 +1011,255 @@ shell_command_lookup(const char *name)
   return NULL;
 }
 /*---------------------------------------------------------------------------*/
+#ifdef WITH_FLOCK
+#include "os/net/mac/osf/osf.h"
+#include "examples/osf-flock/flock-dist-table.h"
+#include "examples/osf-flock/flock-pos-table.h"
+#include "examples/osf-flock/flock.h"
+#include "examples/osf-flock/flock-loc.h"
+#include "arch/dev/sensor/dw1000/dw1000.h"
+#include "arch/dev/sensor/dw1000/deca_regs.h"
+#include "arch/dev/sensor/dw1000/deca_device_api.h"
+#include "arch/dev/sensor/dw1000/deca_regs.h"
+
+static
+PT_THREAD(cmd_flock_radio_status(struct pt *pt, shell_output_func output, char *args))
+{
+  PT_BEGIN(pt);
+  uint32_t status = dwt_read32bitreg(SYS_STATUS_ID);
+  uint32_t status_mask = 0;
+  printf("{\"status\":0x%08lx}\n", status);
+  
+  if(status & (SYS_STATUS_CLKPLL_LL)){
+    printf("[WARNING] CLKPLL_LL lock loss\n");
+    status_mask |= SYS_STATUS_CLKPLL_LL;
+  }
+  if(status & (SYS_STATUS_RFPLL_LL)){
+    printf("RFPLL_LL lock loss\n");
+    status_mask |= SYS_STATUS_RFPLL_LL;
+  }
+
+  // clear status bits
+  dwt_write32bitreg(SYS_STATUS_ID, status_mask);
+
+  PT_END(pt);
+}
+
+static
+PT_THREAD(cmd_flock_dist_table(struct pt *pt, shell_output_func output, char *args))
+{
+  PT_BEGIN(pt);
+  printf("[FLOCK CMD] ");
+
+  size_t len = 0;
+
+  const flock_dist_table_element_t* elem = flock_dist_table_get_head();
+  if(elem == NULL) {
+    printf("[]\n");
+    PT_EXIT(pt);
+  }
+
+  printf("{\"dist\":[");
+  while(elem != NULL){
+    len++;
+    printf("{\"from_id\":%u,\"to_id\":%u,\"dist_mm\":%u,\"epoch\":%u}", elem->from_id, elem->to_id, elem->dist_mm, elem->osf_epoch);
+    elem = flock_dist_table_get_next(elem);
+    if(elem != NULL) {
+      printf(",");
+    } else {
+      break;
+    }
+  }
+  printf("],\"len\":%u,\"table_len\":%u,\"osf_epoch\":%u}\n", len, flock_dist_table_length(), osf.epoch);
+
+  PT_END(pt);
+}
+
+static
+PT_THREAD(cmd_flock_dist_table_clear(struct pt *pt, shell_output_func output, char *args))
+{
+  PT_BEGIN(pt);
+  flock_dist_table_init();
+  PT_END(pt);
+}
+
+
+static
+PT_THREAD(cmd_flock_pos_table(struct pt *pt, shell_output_func output, char *args))
+{
+  PT_BEGIN(pt);
+  printf("[FLOCK CMD] ");
+
+  flock_pos_table_print_json(&flock_pos_table);
+
+  printf("\n");
+
+  PT_END(pt);
+}
+
+static
+PT_THREAD(cmd_flock_pos_table_clear(struct pt *pt, shell_output_func output, char *args))
+{
+  PT_BEGIN(pt);
+  flock_pos_table_init(&flock_pos_table);
+  PT_END(pt);
+}
+
+static
+PT_THREAD(cmd_flock_set_pos(struct pt *pt, shell_output_func output, char *args))
+{
+  PT_BEGIN(pt);
+  char *next_args;
+  uint16_t id;
+  int x, y;
+
+  SHELL_ARGS_INIT(args, next_args);
+
+  /* Get first arg (node id) */
+  SHELL_ARGS_NEXT(args, next_args);
+  if(args == NULL) {
+    SHELL_OUTPUT(output, "Node ID is not specified\n");
+    PT_EXIT(pt);
+  }
+  id = (uint16_t)strtol(args, NULL, 10);
+
+  /* Get second arg (x coordinate) */
+  SHELL_ARGS_NEXT(args, next_args);
+  if(args == NULL) {
+    SHELL_OUTPUT(output, "X coordinate is not specified\n");
+    PT_EXIT(pt);
+  }
+  x = (int)strtol(args, NULL, 10);
+
+  /* Get third arg (y coordinate) */
+  SHELL_ARGS_NEXT(args, next_args);
+  if(args == NULL) {
+    SHELL_OUTPUT(output, "Y coordinate is not specified\n");
+    PT_EXIT(pt);
+  }
+  y = (int)strtol(args, NULL, 10);
+
+  flock_pos_table_add(&flock_pos_table, id, x, y, FIXED, osf.epoch, 0);
+
+  PT_END(pt);
+}
+
+static
+PT_THREAD(cmd_flock_set_dist(struct pt *pt, shell_output_func output, char *args))
+{
+  PT_BEGIN(pt);
+  char *next_args;
+  uint16_t from_id, to_id;
+  uint32_t dist_mm;
+
+  SHELL_ARGS_INIT(args, next_args);
+
+  /* Get first arg (from_id) */
+  SHELL_ARGS_NEXT(args, next_args);
+  if(args == NULL) {
+    SHELL_OUTPUT(output, "From ID is not specified\n");
+    PT_EXIT(pt);
+  }
+  from_id = (uint16_t)strtol(args, NULL, 10);
+
+  /* Get second arg (to_id) */
+  SHELL_ARGS_NEXT(args, next_args);
+  if(args == NULL) {
+    SHELL_OUTPUT(output, "To ID is not specified\n");
+    PT_EXIT(pt);
+  }
+  to_id = (uint16_t)strtol(args, NULL, 10);
+
+  /* Get third arg (dist_mm) */
+  SHELL_ARGS_NEXT(args, next_args);
+  if(args == NULL) {
+    SHELL_OUTPUT(output, "Distance (mm) is not specified\n");
+    PT_EXIT(pt);
+  }
+  dist_mm = (uint32_t)strtol(args, NULL, 10);
+
+  flock_dist_table_add(from_id, to_id, dist_mm, osf.epoch);
+
+  PT_END(pt);
+}
+
+static
+PT_THREAD(cmd_flock_localize(struct pt *pt, shell_output_func output, char *args))
+{
+  PT_BEGIN(pt);
+  static rtimer_clock_t rtime_start, rtime_end;
+  static bool success;
+
+  rtime_start = RTIMER_NOW();
+  success = flock_loc_estimate_positions(&flock_pos_table);
+  rtime_end = RTIMER_NOW();
+
+  flock_loc_print_result(rtime_start, rtime_end, success);
+
+  PT_END(pt);
+}
+
+static
+PT_THREAD(cmd_flock_loc_set_iterations(struct pt *pt, shell_output_func output, char *args))
+{
+  PT_BEGIN(pt);
+  char *next_args;
+  int iterations;
+
+  SHELL_ARGS_INIT(args, next_args);
+
+  /* Get first arg (iterations) */
+  SHELL_ARGS_NEXT(args, next_args);
+  if(args == NULL) {
+    SHELL_OUTPUT(output, "Number of iterations is not specified\n");
+    PT_EXIT(pt);
+  }
+  iterations = (int)strtol(args, NULL, 10);
+  if(iterations <= 0) {
+    SHELL_OUTPUT(output, "Number of iterations must be > 0\n");
+    PT_EXIT(pt);
+  }
+
+  flock_loc_set_iterations(iterations);
+
+  PT_END(pt);
+}
+
+static
+PT_THREAD(cmd_flock_loc_set_lr(struct pt *pt, shell_output_func output, char *args))
+{
+  PT_BEGIN(pt);
+  char *next_args;
+  int lr;
+
+  SHELL_ARGS_INIT(args, next_args);
+
+  /* Get first arg (lr) */
+  SHELL_ARGS_NEXT(args, next_args);
+  if(args == NULL) {
+    SHELL_OUTPUT(output, "Learning rate is not specified\n");
+    PT_EXIT(pt);
+  }
+  lr = (int)strtol(args, NULL, 10);
+  if(lr <= 0) {
+    SHELL_OUTPUT(output, "Learning rate must be > 0\n");
+    PT_EXIT(pt);
+  }
+  if(lr > 100) {
+    SHELL_OUTPUT(output, "Learning rate must be <= 100\n");
+    PT_EXIT(pt);
+  }
+
+  flock_loc_set_learning_rate(lr / 100.0);
+
+  PT_END(pt);
+}
+
+#endif /* WITH_FLOCK */
+/*---------------------------------------------------------------------------*/
 const struct shell_command_t builtin_shell_commands[] = {
   { "help",                 cmd_help,                 "'> help': Shows this help" },
+  { "echo",                 cmd_echo,                 "'> echo': Echo input string on shell" },
   { "reboot",               cmd_reboot,               "'> reboot': Reboot the board by watchdog_reboot()" },
   { "log",                  cmd_log,                  "'> log module level': Sets log level (0--4) for a given module (or \"all\"). For module \"mac\", level 4 also enables per-slot logging." },
   { "mac-addr",             cmd_macaddr,               "'> mac-addr': Shows the node's MAC address" },
@@ -1031,6 +1297,18 @@ const struct shell_command_t builtin_shell_commands[] = {
   { "llsec-set-level", cmd_llsec_setlv, "'> llsec-set-level <lv>': Set the level of link layer security (show if no lv argument)"},
   { "llsec-set-key", cmd_llsec_setkey, "'> llsec-set-key <id> <key>': Set the key of link layer security"},
 #endif /* LLSEC802154_ENABLED */
+#ifdef WITH_FLOCK
+  { "flock-dist-table", cmd_flock_dist_table, "'> flock-dist-table': prints the current distance table of FLOCK."},
+  { "flock-dist-table-clear", cmd_flock_dist_table_clear, "'> flock-dist-table-clear': clears the current distance table of FLOCK."},
+  { "flock-pos-table", cmd_flock_pos_table, "'> flock-pos-table': prints the current position table of FLOCK."},
+  { "flock-pos-table-clear", cmd_flock_pos_table_clear, "'> flock-pos-table-clear': clears the current position table of FLOCK."},
+  { "flock-set-pos", cmd_flock_set_pos, "'> flock-set-pos <id> <x> <y>': sets the position of the node with id <id> to (x,y) in mm."},
+  { "flock-set-dist", cmd_flock_set_dist, "'> flock-set-dist <from_id> <to_id> <dist_mm>': sets a distance in the distance table of FLOCK."},
+  { "flock-localize", cmd_flock_localize, "'> flock-localize': runs the localization algorithm of FLOCK."},
+  { "flock-loc-set-iterations", cmd_flock_loc_set_iterations, "'> flock-loc-set-iterations <num>': sets the number of iterations for the localization algorithm of FLOCK."},
+  { "flock-loc-set-lr", cmd_flock_loc_set_lr, "'> flock-loc-set-lr <lr>': sets the learning rate for the localization algorithm of FLOCK."},
+  { "flock-radio-status", cmd_flock_radio_status, "'> flock-radio-status': prints the DW1000 radio status register."},
+#endif
   { NULL, NULL, NULL },
 };
 

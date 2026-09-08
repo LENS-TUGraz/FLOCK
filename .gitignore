@@ -83,6 +83,7 @@ compile_commands.json
 
 # Python virtual environment
 .venv
+.venv_linux
 venv
 # Test reports
 test/output
